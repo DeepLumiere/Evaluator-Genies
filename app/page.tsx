@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, ArrowUpRight, BarChart3, Bot, Check, ChevronDown, CircleHelp, Database, FilePlus2, Github, Layers3, LogIn, LogOut, Plus, Search, Send, ShieldCheck, Sparkles, User as UserIcon, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUpRight, BarChart3, Bot, Check, ChevronDown, CircleHelp, Clock, Database, FilePlus2, Github, Layers3, LogIn, LogOut, Plus, Search, Send, Shield, ShieldCheck, Sparkles, User as UserIcon, X, XCircle } from "lucide-react";
 
 type Evaluation = {
   _id: string; model: string; organization: string; benchmark: string; score: number;
   metric: string; category: string; source?: string; evaluatedAt: string;
+  status?: "pending" | "approved" | "rejected";
+  submittedBy?: string;
+  submittedByEmail?: string;
 };
 type UserSession = { id: string; email: string };
-const categories = ["All evaluations", "Reasoning", "Coding", "Knowledge", "Safety"];
+const baseCategories = ["All evaluations", "Reasoning", "Coding", "Knowledge", "Safety"];
 type Recommendation = {
   model: string; organization: string; average: number; demo: boolean;
   evidence: Array<{ benchmark: string; metric: string; score: number; category: string }>;
@@ -18,6 +21,8 @@ export default function Home() {
   const [user, setUser] = useState<UserSession | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [userEvaluations, setUserEvaluations] = useState<Evaluation[]>([]);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   const [category, setCategory] = useState("All evaluations");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -45,11 +50,23 @@ export default function Home() {
     } finally { setLoading(false); }
   }
 
+  async function loadUserEvaluations(email: string) {
+    try {
+      const response = await fetch(`/api/evaluations?user=${encodeURIComponent(email)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (response.ok) setUserEvaluations(data.evaluations || []);
+    } catch { /* Ignore */ }
+  }
+
   useEffect(() => {
     void loadEvaluations();
     try {
       const stored = localStorage.getItem("evalboard_user");
-      if (stored) setUser(JSON.parse(stored));
+      if (stored) {
+        const u = JSON.parse(stored);
+        setUser(u);
+        if (u?.email) void loadUserEvaluations(u.email);
+      }
     } catch { /* Ignore storage parse error */ }
   }, []);
 
@@ -68,14 +85,19 @@ export default function Home() {
   function handleLogout() {
     try { localStorage.removeItem("evalboard_user"); } catch { /* Ignore */ }
     setUser(null);
+    setUserEvaluations([]);
+    if (category === "My Submissions") setCategory("All evaluations");
     setShowProfileMenu(false);
   }
 
-  const visibleEvaluations = useMemo(() => evaluations.filter((item) => {
-    const matchesCategory = category === "All evaluations" || item.category === category;
+  const isMySubmissions = category === "My Submissions";
+  const activeList = isMySubmissions ? userEvaluations : evaluations;
+
+  const visibleEvaluations = useMemo(() => activeList.filter((item) => {
+    const matchesCategory = isMySubmissions || category === "All evaluations" || item.category === category;
     const needle = query.toLowerCase().trim();
     return matchesCategory && (!needle || [item.model, item.organization, item.benchmark, item.category].some((value) => value.toLowerCase().includes(needle)));
-  }), [evaluations, category, query]);
+  }), [activeList, isMySubmissions, category, query]);
   const avg = evaluations.length ? (evaluations.reduce((sum, item) => sum + item.score, 0) / evaluations.length).toFixed(1) : "—";
   const organizations = new Set(evaluations.map((item) => item.organization)).size;
 
@@ -90,12 +112,18 @@ export default function Home() {
       metric: String(form.get("metric") || ""),
       category: String(form.get("category") || ""),
       source: String(form.get("source") || ""),
+      submittedBy: user ? user.email.split("@")[0] : "community",
+      submittedByEmail: user ? user.email : "",
     };
     try {
       const response = await fetch("/api/evaluations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save this evaluation.");
-      setEvaluations((items) => [data.evaluation, ...items]); setShowForm(false);
+      setUserEvaluations((items) => [data.evaluation, ...items]);
+      setShowForm(false);
+      setSubmissionNotice("Your evaluation has been submitted for review! It is pending admin approval and visible in 'My Submissions'.");
+      setTimeout(() => setSubmissionNotice(null), 9000);
+      if (user) setCategory("My Submissions");
     } catch (cause) { setFormError(cause instanceof Error ? cause.message : "Could not save this evaluation."); }
     finally { setSaving(false); }
   }
@@ -110,6 +138,10 @@ export default function Home() {
     } catch (cause) { setFinderError(cause instanceof Error ? cause.message : "Could not find a model recommendation."); }
     finally { setFinding(false); }
   }
+
+  const categoriesToDisplay = user
+    ? [...baseCategories, "My Submissions"]
+    : baseCategories;
 
   return <main className="shell">
     <header className="topbar">
@@ -138,6 +170,13 @@ export default function Home() {
                   <Sparkles size={12} /> Evalboard Member
                 </div>
                 <div className="profile-dropdown-divider" />
+                <button className="profile-dropdown-item" onClick={() => { setCategory("My Submissions"); setShowProfileMenu(false); }}>
+                  <FilePlus2 size={13} /> My Submissions ({userEvaluations.length})
+                </button>
+                <a className="profile-dropdown-item" href="/admin">
+                  <Shield size={13} /> Admin Console
+                </a>
+                <div className="profile-dropdown-divider" />
                 <button className="profile-dropdown-item logout" onClick={handleLogout}>
                   <LogOut size={13} /> Sign out
                 </button>
@@ -147,10 +186,19 @@ export default function Home() {
         ) : (
           <a className="button button-outline button-small" href="/login"><LogIn size={14}/> Sign in</a>
         )}
+        <a className="button button-outline button-small" href="/admin" title="Admin moderation portal">
+          <Shield size={13}/> Admin
+        </a>
         <button className="button button-soft button-small finder-trigger" onClick={() => setShowFinder(true)}><Sparkles size={14}/> Find my model</button>
         <button className="button button-dark button-small" onClick={() => setShowForm(true)}><Plus size={15}/> Add evaluation</button>
       </div>
     </header>
+
+    {submissionNotice && (
+      <div className="admin-banner-notice" style={{ margin: "16px 0 -10px" }}>
+        <Check size={14} /> {submissionNotice}
+      </div>
+    )}
 
     <section className="hero" id="top">
       <div className="hero-copy"><div className="eyebrow"><span className="live-dot"/> MODEL EVALUATION, MADE CLEAR</div>
@@ -174,28 +222,83 @@ export default function Home() {
     </section>
 
     <section className="evaluations-section" id="evaluations">
-      <div className="section-heading"><div><div className="eyebrow muted">THE SCOREBOARD</div><h2>Evaluation cards<span className="heading-count">{evaluations.length}</span></h2><p>Each result, with the context that makes it meaningful.</p></div><button className="button button-outline" onClick={() => setShowForm(true)}><FilePlus2 size={16}/> Submit a result</button></div>
-      <div className="toolbar"><div className="tabs" role="tablist" aria-label="Filter by category">{categories.map((item) => <button key={item} className={`tab ${category === item ? "selected" : ""}`} onClick={() => setCategory(item)} role="tab" aria-selected={category === item}>{item}</button>)}</div><label className="searchbox"><Search size={16}/><input placeholder="Search models, benchmarks..." value={query} onChange={(event) => setQuery(event.target.value)}/><kbd>⌘ K</kbd></label></div>
-      <div className="table-wrap"><table><thead><tr><th>MODEL &amp; ORGANIZATION</th><th>BENCHMARK</th><th>AREA</th><th>SCORE</th><th>REPORTED</th><th><span className="sr-only">Details</span></th></tr></thead>
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow muted">{isMySubmissions ? "YOUR CONTRIBUTIONS" : "THE SCOREBOARD"}</div>
+          <h2>{isMySubmissions ? "My submitted evaluations" : "Evaluation cards"}<span className="heading-count">{visibleEvaluations.length}</span></h2>
+          <p>{isMySubmissions ? "Track the approval status of benchmarks you submitted." : "Each result, with the context that makes it meaningful."}</p>
+        </div>
+        <button className="button button-outline" onClick={() => setShowForm(true)}><FilePlus2 size={16}/> Submit a result</button>
+      </div>
+      <div className="toolbar">
+        <div className="tabs" role="tablist" aria-label="Filter by category">
+          {categoriesToDisplay.map((item) => (
+            <button
+              key={item}
+              className={`tab ${category === item ? "selected" : ""}`}
+              onClick={() => setCategory(item)}
+              role="tab"
+              aria-selected={category === item}
+            >
+              {item}
+              {item === "My Submissions" && (
+                <span className={`tab-pill ${userEvaluations.some((e) => e.status === "pending") ? "pill-alert" : ""}`}>
+                  {userEvaluations.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <label className="searchbox"><Search size={16}/><input placeholder="Search models, benchmarks..." value={query} onChange={(event) => setQuery(event.target.value)}/><kbd>⌘ K</kbd></label>
+      </div>
+      <div className="table-wrap"><table><thead><tr><th>MODEL &amp; ORGANIZATION</th><th>BENCHMARK</th><th>AREA</th><th>SCORE</th><th>{isMySubmissions ? "STATUS" : "REPORTED"}</th><th><span className="sr-only">Details</span></th></tr></thead>
         <tbody>{loading ? <tr><td colSpan={6} className="empty-row"><span className="spinner"/> Loading evaluations…</td></tr> : visibleEvaluations.length ? visibleEvaluations.map((item) => <tr className="evaluation-row" key={item._id} onClick={() => setSelected(item)}>
           <td><div className="model-cell"><span className={`model-logo logo-${item.organization.length % 4}`}>{item.organization.slice(0,1).toUpperCase()}</span><span><strong>{item.model}</strong><small>{item.organization}</small></span></div></td>
           <td><span className="benchmark-name">{item.benchmark}</span><small className="subtle-cell">{item.metric}</small></td>
           <td><span className={`category-pill category-${item.category.toLowerCase()}`}>{item.category}</span></td>
           <td><span className="score-number">{item.score.toFixed(1)}<small>%</small></span><div className="score-track"><span style={{ width: `${item.score}%` }}/></div></td>
-          <td className="date-cell">{new Date(item.evaluatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td><td><ArrowUpRight className="row-arrow" size={16}/></td>
-        </tr>) : <tr><td colSpan={6} className="empty-row"><div className="empty-icon"><Database size={20}/></div><strong>{error ? "Database connection needed" : query || category !== "All evaluations" ? "No matching evaluations" : "Your evaluation board is ready"}</strong><p>{error || (query || category !== "All evaluations" ? "Try another search or category." : "Connect MongoDB and add your first result to get started.")}</p>{error ? <button className="button button-outline" onClick={() => void loadEvaluations()}>Retry connection</button> : !query && category === "All evaluations" && <button className="button button-dark button-small" onClick={() => setShowForm(true)}><Plus size={15}/> Add evaluation</button>}</td></tr>}</tbody>
+          <td>
+            {isMySubmissions ? (
+              item.status === "pending" ? (
+                <span className="status-badge status-pending"><Clock size={11} /> Pending Review</span>
+              ) : item.status === "rejected" ? (
+                <span className="status-badge status-rejected"><XCircle size={11} /> Rejected</span>
+              ) : (
+                <span className="status-badge status-approved"><Check size={11} /> Approved &amp; Live</span>
+              )
+            ) : (
+              <span className="date-cell">{new Date(item.evaluatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+            )}
+          </td>
+          <td><ArrowUpRight className="row-arrow" size={16}/></td>
+        </tr>) : <tr><td colSpan={6} className="empty-row"><div className="empty-icon"><Database size={20}/></div><strong>{error ? "Database connection needed" : isMySubmissions ? "No submitted evaluations yet" : query || category !== "All evaluations" ? "No matching evaluations" : "Your evaluation board is ready"}</strong><p>{error || (isMySubmissions ? "Submit an evaluation card using the button below. It will be reviewed by an admin before going live." : query || category !== "All evaluations" ? "Try another search or category." : "Connect MongoDB and add your first result to get started.")}</p>{error ? <button className="button button-outline" onClick={() => void loadEvaluations()}>Retry connection</button> : (isMySubmissions || (!query && category === "All evaluations")) && <button className="button button-dark button-small" onClick={() => setShowForm(true)}><Plus size={15}/> Add evaluation</button>}</td></tr>}</tbody>
       </table></div>
-      <div className="table-footer"><span>Showing <b>{visibleEvaluations.length}</b> of <b>{evaluations.length}</b> results</span><span className="updated-label"><span className="live-dot"/> Live from your database</span></div>
+      <div className="table-footer"><span>Showing <b>{visibleEvaluations.length}</b> of <b>{activeList.length}</b> {isMySubmissions ? "personal submissions" : "results"}</span><span className="updated-label"><span className="live-dot"/> Live from your database</span></div>
     </section>
     <footer id="about"><a className="brand footer-brand" href="#top"><span className="brand-mark"><Layers3 size={16}/></span>evalboard<span className="brand-dot">.</span></a><span>Thoughtful evaluation for a clearer picture of AI.</span><a href="#top">Back to top ↑</a></footer>
 
-    {showForm && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow muted">CONTRIBUTE A RESULT</div><h2 id="form-title">Add an evaluation</h2><p>Share a model result with its benchmark context.</p></div><button className="icon-button" aria-label="Close" onClick={() => setShowForm(false)}><X size={19}/></button></div><form onSubmit={createEvaluation}><div className="form-grid">
-      <label>Model name<input name="model" placeholder="e.g. Claude 3.7 Sonnet" required maxLength={100}/></label><label>Organization<input name="organization" placeholder="e.g. Anthropic" required maxLength={100}/></label><label>Benchmark<input name="benchmark" placeholder="e.g. MATH-500" required maxLength={120}/></label><label>Score (%)<input name="score" type="number" min="0" max="100" step="0.1" placeholder="e.g. 94.2" required/></label><label>Metric<input name="metric" placeholder="e.g. pass@1" required maxLength={60}/></label><label>Area<select name="category" defaultValue="Reasoning"><option>Reasoning</option><option>Coding</option><option>Knowledge</option><option>Safety</option></select><ChevronDown className="select-chevron" size={14}/></label><label className="full-field">Source URL <span className="optional">Optional</span><input name="source" type="url" placeholder="https://..." maxLength={300}/></label></div>{formError && <p className="form-error">{formError}</p>}<div className="form-actions"><span><CircleHelp size={14}/> Scores are normalized to 0–100.</span><button className="button button-dark" disabled={saving}>{saving ? "Saving…" : <><Plus size={15}/> Add to board</>}</button></div></form></section></div>}
+    {showForm && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow muted">CONTRIBUTE A RESULT</div><h2 id="form-title">Add an evaluation</h2><p>Share a model result with its benchmark context. User submissions are reviewed by an admin.</p></div><button className="icon-button" aria-label="Close" onClick={() => setShowForm(false)}><X size={19}/></button></div><form onSubmit={createEvaluation}><div className="form-grid">
+      <label>Model name<input name="model" placeholder="e.g. Claude 3.7 Sonnet" required maxLength={100}/></label><label>Organization<input name="organization" placeholder="e.g. Anthropic" required maxLength={100}/></label><label>Benchmark<input name="benchmark" placeholder="e.g. MATH-500" required maxLength={120}/></label><label>Score (%)<input name="score" type="number" min="0" max="100" step="0.1" placeholder="e.g. 94.2" required/></label><label>Metric<input name="metric" placeholder="e.g. pass@1" required maxLength={60}/></label><label>Area<select name="category" defaultValue="Reasoning"><option>Reasoning</option><option>Coding</option><option>Knowledge</option><option>Safety</option></select><ChevronDown className="select-chevron" size={14}/></label><label className="full-field">Source URL <span className="optional">Optional</span><input name="source" type="url" placeholder="https://..." maxLength={300}/></label></div>{formError && <p className="form-error">{formError}</p>}<div className="form-actions"><span><CircleHelp size={14}/> {user ? `Submitting as ${user.email}` : "Scores undergo admin review."}</span><button className="button button-dark" disabled={saving}>{saving ? "Submitting…" : <><Plus size={15}/> Submit for review</>}</button></div></form></section></div>}
     {showFinder && <div className="modal-backdrop finder-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowFinder(false); }}><section className="modal finder-modal" role="dialog" aria-modal="true" aria-labelledby="finder-title"><div className="modal-head"><div><div className="eyebrow"><Sparkles size={12}/> MODEL ADVISOR</div><h2 id="finder-title">Find the right model for your work</h2><p>Tell us what you want to get done. We’ll match it to evaluation evidence.</p></div><button className="icon-button" aria-label="Close" onClick={() => setShowFinder(false)}><X size={19}/></button></div><form onSubmit={findModel}><label className="finder-label" htmlFor="work-description">What are you working on?</label><textarea id="work-description" className="finder-input" value={workDescription} onChange={(event) => setWorkDescription(event.target.value)} placeholder="For example: I need help building a React app, writing tests, and reviewing code changes." minLength={12} maxLength={1200} required/><div className="finder-meta"><span>{workDescription.length}/1,200 characters</span><span>Be specific for a more useful match</span></div><button className="button button-dark finder-submit" disabled={finding || workDescription.trim().length < 12}>{finding ? <><span className="spinner light-spinner"/> Finding a match…</> : <><Send size={14}/> Find my model</>}</button></form>
       <div className="privacy-note"><Bot size={14}/><span>When configured, your description is sent to Gemini to generate a recommendation. Otherwise, Evalboard matches it locally against your evaluation cards.</span></div>
       {finderError && <p className="form-error finder-error">{finderError}</p>}
       {recommendation && <div className="recommendation-result"><div className="result-kicker"><span><Sparkles size={13}/>{recommendation.mode === "ai" ? "AI RECOMMENDATION" : "EVIDENCE-BASED MATCH"}</span>{recommendation.model && <small>{recommendation.model}</small>}</div><div className="best-match"><div className="match-icon"><Bot size={19}/></div><div><span className="eyebrow muted">BEST AVAILABLE MATCH</span><h3>{recommendation.recommendation.model.replace(/^Demo\s*[·-]\s*/, "")}</h3><p>{recommendation.recommendation.organization}</p></div><span className="match-score">{recommendation.recommendation.average.toFixed(1)}<small> avg.</small></span></div><p className="match-reason">{recommendation.reason}</p>{recommendation.aiNotice && <div className="ai-fallback-note"><CircleHelp size={13}/><span>{recommendation.aiNotice}{recommendation.quotaInfo && <> <a href="https://aistudio.google.com/usage" target="_blank" rel="noreferrer">Check Gemini API usage <ArrowUpRight size={11}/></a></>}</span></div>}<div className="evidence-list"><span className="evidence-heading">SUPPORTING EVALUATIONS</span>{recommendation.recommendation.evidence.map((item) => <div className="evidence-item" key={`${item.category}-${item.benchmark}`}><span><b>{item.benchmark}</b><small>{item.category} · {item.metric}</small></span><strong>{item.score.toFixed(1)}%</strong></div>)}</div>{recommendation.recommendation.demo && <div className="demo-warning"><CircleHelp size={14}/> This recommendation uses demo scores. Replace them with verified evaluations before relying on it.</div>}<details className="other-matches"><summary>See other matching models</summary><div>{recommendation.candidates.slice(1).map((item) => <span key={item.model}>{item.model.replace(/^Demo\s*[·-]\s*/, "")} <b>{item.average.toFixed(1)}</b></span>)}</div></details></div>}
     </section></div>}
-    {selected && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}><section className="modal detail-modal" role="dialog" aria-modal="true"><div className="modal-head"><div><div className="eyebrow muted">EVALUATION DETAIL</div><h2>{selected.model}</h2><p>{selected.organization} · {selected.category}</p></div><button className="icon-button" aria-label="Close" onClick={() => setSelected(null)}><X size={19}/></button></div><div className="detail-score"><div><span className="eyebrow muted">REPORTED SCORE</span><div className="detail-number">{selected.score.toFixed(1)}<small>%</small></div></div><span className="category-pill category-reasoning">{selected.metric}</span></div><div className="detail-list"><div><span>Benchmark</span><b>{selected.benchmark}</b></div><div><span>Area</span><b>{selected.category}</b></div><div><span>Reported</span><b>{new Date(selected.evaluatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</b></div>{selected.source && <div><span>Source</span><a href={selected.source} target="_blank" rel="noreferrer">View report <ArrowUpRight size={14}/></a></div>}</div><div className="detail-note"><Check size={15}/> Score submitted to this evaluation board.</div></section></div>}
+    {selected && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}><section className="modal detail-modal" role="dialog" aria-modal="true"><div className="modal-head"><div><div className="eyebrow muted">EVALUATION DETAIL</div><h2>{selected.model}</h2><p>{selected.organization} · {selected.category}</p></div><button className="icon-button" aria-label="Close" onClick={() => setSelected(null)}><X size={19}/></button></div><div className="detail-score"><div><span className="eyebrow muted">REPORTED SCORE</span><div className="detail-number">{selected.score.toFixed(1)}<small>%</small></div></div><span className="category-pill category-reasoning">{selected.metric}</span></div>
+    <div className="detail-list">
+      <div><span>Benchmark</span><b>{selected.benchmark}</b></div>
+      <div><span>Area</span><b>{selected.category}</b></div>
+      <div><span>Status</span><b style={{ textTransform: "capitalize" }}>{selected.status || "Approved"}</b></div>
+      {selected.submittedBy && <div><span>Submitted By</span><b>{selected.submittedBy}</b></div>}
+      <div><span>Reported</span><b>{new Date(selected.evaluatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</b></div>
+      {selected.source && <div><span>Source</span><a href={selected.source} target="_blank" rel="noreferrer">View report <ArrowUpRight size={14}/></a></div>}
+    </div>
+    <div className="detail-note">
+      {selected.status === "pending"
+        ? <><Clock size={15}/> Pending review. This card will appear publicly once approved by an admin.</>
+        : selected.status === "rejected"
+        ? <><XCircle size={15}/> This evaluation was rejected and is not visible publicly.</>
+        : <><Check size={15}/> Score verified and published to this evaluation board.</>}
+    </div></section></div>}
   </main>;
 }

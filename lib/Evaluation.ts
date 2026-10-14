@@ -8,6 +8,11 @@ const EvaluationSchema = new Schema({
   metric: { type: String, required: true, trim: true, maxlength: 60 },
   category: { type: String, required: true, enum: ["Reasoning", "Coding", "Knowledge", "Safety"] },
   source: { type: String, trim: true, maxlength: 300, default: "" },
+  status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+  submittedBy: { type: String, trim: true, maxlength: 100, default: "anonymous" },
+  submittedByEmail: { type: String, trim: true, lowercase: true, maxlength: 120, default: "" },
+  reviewedAt: { type: Date },
+  reviewedBy: { type: String, trim: true, default: "" },
   evaluatedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
