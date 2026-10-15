@@ -59,13 +59,9 @@ export default function Home() {
     const [workDescription, setWorkDescription] = useState("");
     const [finding, setFinding] = useState(false);
     const [recommendation, setRecommendation] = useState<{
-        mode: "ai" | "data-match";
-        model: string | null;
         recommendation: Recommendation;
         reason: string;
         candidates: Recommendation[];
-        aiNotice?: string;
-        quotaInfo?: boolean
     } | null>(null);
     const [finderError, setFinderError] = useState("");
 
@@ -434,9 +430,7 @@ export default function Home() {
                     </tr>}</tbody>
                 </table>
             </div>
-            <div className="table-footer">
-                <span>Showing <b>{visibleEvaluations.length}</b> of <b>{activeList.length}</b> {isMySubmissions ? "personal submissions" : "results"}</span><span
-                className="updated-label"><span className="live-dot"/> Live from your database</span></div>
+
         </section>
         <footer id="about"><a className="brand footer-brand" href="#top"><span className="brand-mark"><Layers3
             size={16}/></span>evalboard<span className="brand-dot">.</span></a><span>Thoughtful evaluation for a clearer picture of AI.</span><a

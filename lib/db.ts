@@ -4,7 +4,6 @@ const MONGODB_URI =
   process.env.MONGODB_URI ||
   "mongodb://jeelpadsala15_db_user:Mongo%40Pass@ac-avawqsa-shard-00-00.dwk4i6x.mongodb.net:27017,ac-avawqsa-shard-00-01.dwk4i6x.mongodb.net:27017,ac-avawqsa-shard-00-02.dwk4i6x.mongodb.net:27017/evalution?ssl=true&authSource=admin&replicaSet=atlas-12luut-shard-0&retryWrites=true&w=majority&tlsAllowInvalidCertificates=true";
 
-// Direct IP lookup prevents Windows / ISP querySrv & queryA EREFUSED DNS failures
 const SHARD_IPS: Record<string, string> = {
   "ac-avawqsa-shard-00-00.dwk4i6x.mongodb.net": "159.41.206.101",
   "ac-avawqsa-shard-00-01.dwk4i6x.mongodb.net": "159.41.206.123",
