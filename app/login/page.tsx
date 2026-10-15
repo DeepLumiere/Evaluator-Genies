@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Layers3, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, CheckCircle2 } from "lucide-react";
+import ThemeToggle from "@/lib/ThemeToggle";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,7 +19,6 @@ export default function LoginPage() {
       if (stored) {
         const u = JSON.parse(stored);
         if (u?.email) {
-          // User already logged in, redirect home
           window.location.href = "/";
         }
       }
@@ -71,13 +71,26 @@ export default function LoginPage() {
             <Sparkles size={28} />
           </div>
           <div className="login-tagline">
-            <h2>Know what a model<br />can <span>actually do.</span></h2>
-            <p>A clear, considered view of AI evaluation results. Explore benchmark scores, understand the context, and see where every number comes from.</p>
+            <h2>
+              Know what a model<br />can <span>actually do.</span>
+            </h2>
+            <p>
+              A clear, considered view of AI evaluation results. Explore benchmark scores, understand the context, and see where every number comes from.
+            </p>
           </div>
           <div className="login-stats-row">
-            <div className="login-stat"><strong>24+</strong><span>Evaluations</span></div>
-            <div className="login-stat"><strong>15+</strong><span>Models</span></div>
-            <div className="login-stat"><strong>4</strong><span>Categories</span></div>
+            <div className="login-stat">
+              <strong>24+</strong>
+              <span>Evaluations</span>
+            </div>
+            <div className="login-stat">
+              <strong>15+</strong>
+              <span>Models</span>
+            </div>
+            <div className="login-stat">
+              <strong>4</strong>
+              <span>Categories</span>
+            </div>
           </div>
         </div>
       </div>
@@ -86,22 +99,62 @@ export default function LoginPage() {
         <div className="login-form-container">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
             <a className="brand login-brand" href="/" style={{ margin: 0 }}>
-              <span className="brand-mark"><Layers3 size={19} strokeWidth={2.3} /></span>
-              <span>evalboard<span className="brand-dot">.</span></span>
+              <span className="brand-mark">
+                <Layers3 size={19} strokeWidth={2.3} />
+              </span>
+              <span>
+                evalboard<span className="brand-dot">.</span>
+              </span>
             </a>
-            <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11px", color: "#6e776f", textDecoration: "none", fontWeight: 600 }}>
-              <ArrowLeft size={13} /> Back to board
-            </a>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <ThemeToggle />
+              <a
+                href="/"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                }}
+              >
+                <ArrowLeft size={13} /> Back to board
+              </a>
+            </div>
           </div>
 
           <div className="login-header">
             <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-            <p>{mode === "login" ? "Sign in to submit and track your model evaluation cards." : "Join Evalboard to submit benchmark results and track reviews."}</p>
+            <p>
+              {mode === "login"
+                ? "Sign in to submit and track your model evaluation cards."
+                : "Join Evalboard to submit benchmark results and track reviews."}
+            </p>
           </div>
 
           <div className="login-tabs">
-            <button className={`login-tab ${mode === "login" ? "active" : ""}`} onClick={() => { setMode("login"); setError(""); setSuccessMsg(""); }}>Sign in</button>
-            <button className={`login-tab ${mode === "signup" ? "active" : ""}`} onClick={() => { setMode("signup"); setError(""); setSuccessMsg(""); }}>Create account</button>
+            <button
+              className={`login-tab ${mode === "login" ? "active" : ""}`}
+              onClick={() => {
+                setMode("login");
+                setError("");
+                setSuccessMsg("");
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              className={`login-tab ${mode === "signup" ? "active" : ""}`}
+              onClick={() => {
+                setMode("signup");
+                setError("");
+                setSuccessMsg("");
+              }}
+            >
+              Create account
+            </button>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
@@ -132,7 +185,12 @@ export default function LoginPage() {
                   required
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                 />
-                <button type="button" className="login-eye" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                <button
+                  type="button"
+                  className="login-eye"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
@@ -146,7 +204,15 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleQuickDemo}
-                style={{ background: "none", border: 0, color: "#55785e", fontSize: "10px", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                style={{
+                  background: "none",
+                  border: 0,
+                  color: "var(--green)",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  padding: 0,
+                }}
               >
                 Use sample credentials
               </button>
@@ -154,25 +220,67 @@ export default function LoginPage() {
 
             {error && <p className="login-error">{error}</p>}
             {successMsg && (
-              <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "#326842", background: "#ecf6ee", border: "1px solid #d0e7d4", padding: "8px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: 600, margin: "10px 0 0" }}>
+              <p
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "var(--green)",
+                  background: "var(--accent)",
+                  border: "1px solid var(--green)",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  margin: "10px 0 0",
+                }}
+              >
                 <CheckCircle2 size={14} /> {successMsg}
               </p>
             )}
 
             <button className="button button-dark login-submit" type="submit" disabled={loading}>
               {loading ? (
-                <><span className="spinner light-spinner" /> {mode === "login" ? "Signing in…" : "Creating account…"}</>
+                <>
+                  <span className="spinner light-spinner" /> {mode === "login" ? "Signing in…" : "Creating account…"}
+                </>
               ) : (
-                <>{mode === "login" ? "Sign in to Evalboard" : "Create account & enter"} <ArrowRight size={15} /></>
+                <>
+                  {mode === "login" ? "Sign in to Evalboard" : "Create account & enter"} <ArrowRight size={15} />
+                </>
               )}
             </button>
           </form>
 
           <p className="login-footer-text" style={{ marginTop: "24px" }}>
             {mode === "login" ? (
-              <>Don&apos;t have an account? <button type="button" className="login-switch" onClick={() => { setMode("signup"); setError(""); }}>Sign up</button></>
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  type="button"
+                  className="login-switch"
+                  onClick={() => {
+                    setMode("signup");
+                    setError("");
+                  }}
+                >
+                  Sign up
+                </button>
+              </>
             ) : (
-              <>Already have an account? <button type="button" className="login-switch" onClick={() => { setMode("login"); setError(""); }}>Sign in</button></>
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  className="login-switch"
+                  onClick={() => {
+                    setMode("login");
+                    setError("");
+                  }}
+                >
+                  Sign in
+                </button>
+              </>
             )}
           </p>
         </div>
