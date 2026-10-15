@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Layers3, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Layers3, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -9,12 +9,29 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("evalboard_user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u?.email) {
+          // User already logged in, redirect home
+          window.location.href = "/";
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
+    setSuccessMsg("");
 
     try {
       const response = await fetch("/api/auth", {
@@ -27,7 +44,10 @@ export default function LoginPage() {
       if (data.user) {
         localStorage.setItem("evalboard_user", JSON.stringify(data.user));
       }
-      window.location.href = "/";
+      setSuccessMsg(mode === "signup" ? "Account ready! Redirecting…" : "Signed in! Redirecting…");
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 600);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Something went wrong. Please try again.");
     } finally {
@@ -35,10 +55,9 @@ export default function LoginPage() {
     }
   }
 
-  function handleSocialLogin(provider: string) {
-    const demoUser = { id: "demo-" + provider.toLowerCase(), email: `demo@${provider.toLowerCase()}.com` };
-    localStorage.setItem("evalboard_user", JSON.stringify(demoUser));
-    window.location.href = "/";
+  function handleQuickDemo() {
+    setEmail("jeelpadsala15@gmail.com");
+    setPassword("admin123");
   }
 
   return (
@@ -56,8 +75,8 @@ export default function LoginPage() {
             <p>A clear, considered view of AI evaluation results. Explore benchmark scores, understand the context, and see where every number comes from.</p>
           </div>
           <div className="login-stats-row">
-            <div className="login-stat"><strong>500+</strong><span>Evaluations</span></div>
-            <div className="login-stat"><strong>40+</strong><span>Models</span></div>
+            <div className="login-stat"><strong>24+</strong><span>Evaluations</span></div>
+            <div className="login-stat"><strong>15+</strong><span>Models</span></div>
             <div className="login-stat"><strong>4</strong><span>Categories</span></div>
           </div>
         </div>
@@ -65,19 +84,24 @@ export default function LoginPage() {
 
       <div className="login-right">
         <div className="login-form-container">
-          <a className="brand login-brand" href="/">
-            <span className="brand-mark"><Layers3 size={19} strokeWidth={2.3} /></span>
-            <span>evalboard<span className="brand-dot">.</span></span>
-          </a>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
+            <a className="brand login-brand" href="/" style={{ margin: 0 }}>
+              <span className="brand-mark"><Layers3 size={19} strokeWidth={2.3} /></span>
+              <span>evalboard<span className="brand-dot">.</span></span>
+            </a>
+            <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11px", color: "#6e776f", textDecoration: "none", fontWeight: 600 }}>
+              <ArrowLeft size={13} /> Back to board
+            </a>
+          </div>
 
           <div className="login-header">
             <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-            <p>{mode === "login" ? "Sign in to access your evaluation dashboard." : "Get started with your free Evalboard account."}</p>
+            <p>{mode === "login" ? "Sign in to submit and track your model evaluation cards." : "Join Evalboard to submit benchmark results and track reviews."}</p>
           </div>
 
           <div className="login-tabs">
-            <button className={`login-tab ${mode === "login" ? "active" : ""}`} onClick={() => { setMode("login"); setError(""); }}>Sign in</button>
-            <button className={`login-tab ${mode === "signup" ? "active" : ""}`} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
+            <button className={`login-tab ${mode === "login" ? "active" : ""}`} onClick={() => { setMode("login"); setError(""); setSuccessMsg(""); }}>Sign in</button>
+            <button className={`login-tab ${mode === "signup" ? "active" : ""}`} onClick={() => { setMode("signup"); setError(""); setSuccessMsg(""); }}>Create account</button>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
@@ -106,7 +130,6 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                 />
                 <button type="button" className="login-eye" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
@@ -115,43 +138,37 @@ export default function LoginPage() {
               </div>
             </label>
 
-            {mode === "login" && (
-              <div className="login-extras">
-                <label className="login-remember">
-                  <input type="checkbox" defaultChecked />
-                  <span>Remember me</span>
-                </label>
-                <a href="#" className="login-forgot">Forgot password?</a>
-              </div>
-            )}
+            <div className="login-extras" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label className="login-remember">
+                <input type="checkbox" defaultChecked />
+                <span>Keep me signed in</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleQuickDemo}
+                style={{ background: "none", border: 0, color: "#55785e", fontSize: "10px", fontWeight: 600, cursor: "pointer", padding: 0 }}
+              >
+                Use sample credentials
+              </button>
+            </div>
 
             {error && <p className="login-error">{error}</p>}
+            {successMsg && (
+              <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "#326842", background: "#ecf6ee", border: "1px solid #d0e7d4", padding: "8px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: 600, margin: "10px 0 0" }}>
+                <CheckCircle2 size={14} /> {successMsg}
+              </p>
+            )}
 
             <button className="button button-dark login-submit" type="submit" disabled={loading}>
               {loading ? (
                 <><span className="spinner light-spinner" /> {mode === "login" ? "Signing in…" : "Creating account…"}</>
               ) : (
-                <>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight size={15} /></>
+                <>{mode === "login" ? "Sign in to Evalboard" : "Create account & enter"} <ArrowRight size={15} /></>
               )}
             </button>
           </form>
 
-          <div className="login-divider">
-            <span>or continue with</span>
-          </div>
-
-          <div className="login-socials">
-            <button type="button" className="login-social-btn" onClick={() => handleSocialLogin("Google")}>
-              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              Google
-            </button>
-            <button type="button" className="login-social-btn" onClick={() => handleSocialLogin("GitHub")}>
-              <Github size={16} />
-              GitHub
-            </button>
-          </div>
-
-          <p className="login-footer-text">
+          <p className="login-footer-text" style={{ marginTop: "24px" }}>
             {mode === "login" ? (
               <>Don&apos;t have an account? <button type="button" className="login-switch" onClick={() => { setMode("signup"); setError(""); }}>Sign up</button></>
             ) : (
