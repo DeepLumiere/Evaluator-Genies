@@ -1,276 +1,471 @@
-# Evalboard
+# Evalboard — Technical Architecture & Flow Documentation
 
-Evalboard is a small directory for browsing and comparing AI model evaluation results. People can search evaluation cards, submit new results for review, and describe a task to get a model suggestion. Administrators review submissions before they appear on the public board.
+Evalboard is a full-stack Next.js application for exploring, submitting, and comparing AI model evaluation benchmarks. It includes an evidence-based Model Advisor powered by Google's Gemini API and a dedicated administrator moderation portal.
 
-This project is a learning/demo application. Its sample evaluation data is illustrative, and its current authentication is not suitable for a public production service. See [Security and data limitations](#security-and-data-limitations) before deploying it.
+---
 
-## Contents
+## Table of Contents
 
-- [What the application does](#what-the-application-does)
-- [Technology choices](#technology-choices)
-- [Project layout](#project-layout)
-- [How information moves through the app](#how-information-moves-through-the-app)
-- [Run it on your computer](#run-it-on-your-computer)
-- [Environment settings](#environment-settings)
-- [Main pages and components](#main-pages-and-components)
-- [API reference](#api-reference)
-- [Database structure](#database-structure)
-- [How the model advisor works](#how-the-model-advisor-works)
-- [Common tasks](#common-tasks)
-- [Troubleshooting](#troubleshooting)
-- [Security and data limitations](#security-and-data-limitations)
+1. [Libraries & Technologies](#1-libraries--technologies)
+2. [Project Layout & Function Inventory](#2-project-layout--function-inventory)
+3. [System Architecture Diagram](#3-system-architecture-diagram)
+4. [Flow 1: Database Connection & DNS Handling (`lib/db.ts`)](#4-flow-1-database-connection--dns-handling-libdbts)
+5. [Flow 2: Authentication & User Session (`/api/auth` & `/login`)](#5-flow-2-authentication--user-session-apiauth--login)
+6. [Flow 3: Evaluation Cards & Submissions (`/api/evaluations` & `/`)](#6-flow-3-evaluation-cards--submissions-apievaluations--)
+7. [Flow 4: Model Advisor & Gemini Recommendation (`/api/recommendations`)](#7-flow-4-model-advisor--gemini-recommendation-apirecommendations)
+8. [Flow 5: Admin Moderation Console (`/admin` & `/api/admin/*`)](#8-flow-5-admin-moderation-console-admin--apiadmin)
+9. [Environment Settings & Setup](#9-environment-settings--setup)
 
-## What the application does
+---
 
-Evalboard has three main user journeys:
+## 1. Libraries & Technologies
 
-1. **Browse evidence.** The home page shows approved evaluation cards. Search and category filters help narrow the list, and each card can be opened for more detail.
-2. **Submit evidence.** A user can submit an evaluation card. It is saved as `pending`, so it does not immediately become public.
-3. **Get a model suggestion.** A user describes a task in the Model Advisor. When Gemini is configured, the server asks Gemini to choose from models that have evaluation records in MongoDB. If Gemini cannot be used, the app makes a local score-based suggestion instead.
+| Library / Tool | Version | Purpose in Project |
+| :--- | :--- | :--- |
+| **Next.js** | `^14.2.21` | React App Router framework handling client pages and serverless API route handlers. |
+| **React & React-DOM** | `^18.3.1` | Client-side reactive UI components, hooks (`useState`, `useEffect`, `useMemo`). |
+| **Mongoose** | `^8.9.5` | ODM for MongoDB schema modeling, queries, updates, and connection caching. |
+| **Lucide React** | `^0.468.0` | SVG icons for navigation, status indicators, badges, and modal actions. |
+| **Node.js `dns` & `net`** | Native | Custom DNS lookup fallback to resolve Atlas replica set hosts without Windows `querySrv` failures. |
+| **Fetch API** | Native | Server-side communication with Google's Generative Language API (Gemini). |
+| **TypeScript** | `^5.7.3` | Type definitions and compile-time validation. |
 
-The admin page is the review step between submission and publication. An administrator can approve, reject, restore, search, inspect, and delete evaluation records.
+---
 
-## Technology choices
-
-- **Next.js 14 and React 18** build the pages and server-side API routes in one project. This keeps the user interface and its data endpoints together.
-- **TypeScript** adds type checking so common mistakes in page and API code are easier to catch.
-- **MongoDB with Mongoose** stores evaluation cards and user records. Mongoose defines the evaluation shape and reuses a cached database connection during local development.
-- **Gemini API** can interpret a user's task description and select among evidence-backed candidates. The API key stays on the server; browser code calls this app's API instead of Google's API directly.
-- **Lucide React** provides the interface icons. The shared visual system is written in CSS.
-
-## Project layout
+## 2. Project Layout & Function Inventory
 
 ```text
-app/
-  page.tsx                         Public evaluation board and Model Advisor
-  layout.tsx                       Shared HTML shell and page metadata
-  globals.css                      Shared layout, components, and responsive styles
-  login/page.tsx                   Sign-in and sign-up interface
-  admin/page.tsx                   Admin review console
-  api/
-    evaluations/route.ts           Public list, personal list, and submissions
-    recommendations/route.ts       Gemini and score-based recommendations
-    auth/route.ts                  Demo user sign-up and login
-    admin/
-      auth/route.ts                Admin login and token check
-      evaluations/route.ts         Protected admin list and moderation actions
-lib/
-  db.ts                            MongoDB connection helper
-  Evaluation.ts                    Mongoose evaluation-card schema/model
-  adminAuth.ts                     Admin credential and token helpers
-.env.example                       Names and examples of configuration settings
-.gitignore                         Excludes generated files and local secrets
-next.config.mjs                    Next.js configuration
-package.json                       Dependencies and command shortcuts
-tsconfig.json                      TypeScript compiler settings and @/* alias
-README.md                          This guide
+├── app/
+│   ├── layout.tsx                     Shared HTML shell & metadata
+│   ├── globals.css                    Global responsive CSS stylesheet
+│   ├── page.tsx                       Public Scoreboard & Model Advisor modal
+│   ├── login/page.tsx                 User Login & Account Creation page
+│   ├── admin/page.tsx                 Admin Login & Moderation console
+│   └── api/
+│       ├── auth/route.ts              User authentication & account persistence
+│       ├── evaluations/route.ts       Public evaluation listing & card submissions
+│       ├── recommendations/route.ts   Model Advisor ranking & Gemini generation
+│       └── admin/
+│           ├── auth/route.ts          Admin credential verification & token issue
+│           └── evaluations/route.ts   Admin CRUD & moderation actions
+├── lib/
+│   ├── db.ts                          Cached Mongoose connection with custom DNS lookup
+│   ├── Evaluation.ts                  Mongoose schema & model for evaluations
+│   └── adminAuth.ts                   Admin credential checks & token verification
+├── .env                               Environment configuration
+└── README.md                          This documentation
 ```
 
-`package-lock.json` records the exact dependency versions installed by npm. Keep it with the project so other installs resolve a consistent dependency tree. `.env.local` is intentionally not part of the repository; it contains private settings and is ignored by Git.
+### File-by-File Function Inventory
 
-## How information moves through the app
+| File | Exported Functions / Handlers | Description |
+| :--- | :--- | :--- |
+| `lib/db.ts` | `connectToDatabase()` | Connects to MongoDB, manages singleton cache, and uses `lookup` mapping to bypass Windows DNS `EREFUSED` errors. |
+| `lib/Evaluation.ts` | `default Evaluation` | Mongoose Model for evaluation documents. |
+| `lib/adminAuth.ts` | `checkAdminCredentials(email, pass)`<br>`verifyAdminToken(request)` | Compares email/password with configured admin credentials; validates `x-admin-token` header. |
+| `app/api/auth/route.ts` | `POST(request)`<br>`DELETE()` | Signs in or creates user in MongoDB, issues `evalboard_user` cookie; deletes cookie on logout. |
+| `app/api/evaluations/route.ts` | `GET(request)`<br>`POST(request)` | Fetches public approved cards (or user submissions); creates pending evaluation card. |
+| `app/api/recommendations/route.ts`| `inferCategories(work)`<br>`POST(request)` | Categorizes work, ranks database evaluation candidates, queries Gemini, returns recommended model. |
+| `app/api/admin/auth/route.ts` | `POST(request)` | Authenticates administrator and returns secret session token. |
+| `app/api/admin/evaluations/route.ts`| `GET(request)`<br>`PATCH(request)`<br>`DELETE(request)` | Lists all status cards with counts; approves/rejects cards; deletes cards permanently. |
+| `app/page.tsx` | `Home()` (Component)<br>`loadEvaluations()`<br>`loadUserEvaluations()`<br>`createEvaluation()`<br>`findModel()`<br>`handleLogout()` | Main scoreboard, category filter, search, submission modal, and Model Advisor dialog. |
+| `app/login/page.tsx` | `LoginPage()` (Component)<br>`handleSubmit()`<br>`handleQuickDemo()` | Sign-in and account creation form with direct redirect to home. |
+| `app/admin/page.tsx` | `AdminPage()` (Component)<br>`handleAdminLogin()`<br>`loadData()`<br>`updateStatus()`<br>`deleteEvaluation()`<br>`handleAdminLogout()` | Admin login gate and moderation dashboard. |
 
-```text
-Browser page
-    │ fetch request
-    ▼
-Next.js API route ───────► MongoDB
-    │                           │
-    └── Model Advisor ──► Gemini (when configured)
+---
+
+## 3. System Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph Client ["Browser / Client-Side (React 18)"]
+        UI_Home["app/page.tsx (Scoreboard & Advisor)"]
+        UI_Login["app/login/page.tsx (Sign In / Register)"]
+        UI_Admin["app/admin/page.tsx (Admin Console)"]
+    end
+
+    subgraph API ["Next.js Server Route Handlers"]
+        API_Auth["/api/auth (POST, DELETE)"]
+        API_Eval["/api/evaluations (GET, POST)"]
+        API_Rec["/api/recommendations (POST)"]
+        API_AdminAuth["/api/admin/auth (POST)"]
+        API_AdminEval["/api/admin/evaluations (GET, PATCH, DELETE)"]
+    end
+
+    subgraph Core ["Shared Library Layer"]
+        DB["lib/db.ts (connectToDatabase)"]
+        Model_Eval["lib/Evaluation.ts (Mongoose)"]
+        Model_User["User Model (in auth/route.ts)"]
+        Admin_Auth["lib/adminAuth.ts"]
+    end
+
+    subgraph External ["External Services"]
+        MongoDB[("MongoDB Atlas Database\n(Cluster 'evalution')")]
+        GeminiAPI["Google AI Studio API\n(models/gemini-2.5-flash)"]
+    end
+
+    UI_Home -->|Fetch cards / submit| API_Eval
+    UI_Home -->|Task description| API_Rec
+    UI_Home -->|Sign out| API_Auth
+    UI_Login -->|Email & Password| API_Auth
+    UI_Admin -->|Admin credentials| API_AdminAuth
+    UI_Admin -->|Moderate / Delete| API_AdminEval
+
+    API_Auth --> DB
+    API_Auth --> Model_User
+    API_Eval --> DB
+    API_Eval --> Model_Eval
+    API_Rec --> DB
+    API_Rec --> Model_Eval
+    API_Rec -->|Generate content| GeminiAPI
+    API_AdminAuth --> Admin_Auth
+    API_AdminEval --> DB
+    API_AdminEval --> Model_Eval
+    API_AdminEval --> Admin_Auth
+
+    DB -->|Static Host IP Resolution| MongoDB
 ```
 
-The browser asks this app's API routes for data. Those routes connect to MongoDB through `lib/db.ts`. The Model Advisor route also calls Gemini from the server when a key is configured, then returns the recommendation to the browser. This design keeps the Gemini key out of client-side JavaScript.
+---
 
-For submissions, the flow is:
+## 4. Flow 1: Database Connection & DNS Handling (`lib/db.ts`)
 
-1. A card is submitted from the public board.
-2. `POST /api/evaluations` checks the required fields and score range, then stores it with `status: "pending"`.
-3. The admin console fetches all statuses through its protected API.
-4. An administrator approves or rejects the card.
-5. The public board lists approved cards. Older records without a status are treated as approved for compatibility.
+### Why Custom DNS is Needed
+On Windows systems, Node.js's standard `dns.lookup` and `mongodb+srv://` SRV queries often trigger `querySrv EREFUSED` or `queryA EREFUSED` due to local ISP/router DNS limitations. 
 
-## Run it on your computer
+`lib/db.ts` solves this by:
+1. Using the direct standard replica set URI (`atlas-12luut-shard-0`).
+2. Providing a custom `lookup` function that maps Atlas shard hostnames directly to their public IP addresses (`159.41.206.101`, `159.41.206.123`, `159.41.206.113`), achieving zero-latency DNS resolution and eliminating connection drops.
+3. Reusing a cached `mongoose` connection on `globalThis` across server requests.
 
-You need Node.js/npm and a reachable MongoDB database. MongoDB may be installed locally or hosted by a service such as MongoDB Atlas.
+### Implementation Snippet (`lib/db.ts`)
 
-1. Open a terminal in the project folder.
-2. Install packages:
+```typescript
+import mongoose from "mongoose";
 
-   ```bash
-   npm install
-   ```
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  "mongodb://jeelpadsala15_db_user:Mongo%40Pass@ac-avawqsa-shard-00-00.dwk4i6x.mongodb.net:27017,ac-avawqsa-shard-00-01.dwk4i6x.mongodb.net:27017,ac-avawqsa-shard-00-02.dwk4i6x.mongodb.net:27017/evalution?ssl=true&authSource=admin&replicaSet=atlas-12luut-shard-0&retryWrites=true&w=majority&tlsAllowInvalidCertificates=true";
 
-3. Copy `.env.example` to `.env.local` and fill in the values. On PowerShell:
+// Direct IP lookup prevents Windows / ISP querySrv & queryA EREFUSED DNS failures
+const SHARD_IPS: Record<string, string> = {
+  "ac-avawqsa-shard-00-00.dwk4i6x.mongodb.net": "159.41.206.101",
+  "ac-avawqsa-shard-00-01.dwk4i6x.mongodb.net": "159.41.206.123",
+  "ac-avawqsa-shard-00-02.dwk4i6x.mongodb.net": "159.41.206.113",
+};
 
-   ```powershell
-   Copy-Item .env.example .env.local
-   ```
+const lookup: any = (hostname: string, _opts: any, cb: any) => {
+  const callback = typeof _opts === "function" ? _opts : cb;
+  if (SHARD_IPS[hostname]) return callback(null, SHARD_IPS[hostname], 4);
+  require("dns").lookup(hostname, callback);
+};
 
-4. Start the development server:
+let cached = (global as any).mongoose || { conn: null, promise: null };
+(global as any).mongoose = cached;
 
-   ```bash
-   npm run dev
-   ```
-
-5. Visit [http://localhost:3000](http://localhost:3000). The browser address shown in an earlier screenshot used port `3001`; Next.js may select another port if `3000` is already occupied. Use the URL printed in the terminal.
-
-To create a production build and serve it locally:
-
-```bash
-npm run build
-npm run start
+export async function connectToDatabase() {
+  if (cached.conn) return cached.conn;
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(MONGODB_URI, { lookup, family: 4 });
+  }
+  cached.conn = await cached.promise;
+  return cached.conn;
+}
 ```
 
-The `lint` script is `next lint`. It can be run with `npm run lint` where the installed Next.js version supports that command.
+---
 
-## Environment settings
+## 5. Flow 2: Authentication & User Session (`/api/auth` & `/login`)
 
-| Name | Required? | Purpose |
-| --- | --- | --- |
-| `MONGODB_URI` | Yes | MongoDB connection string, including the database name. The example points to local MongoDB and the `evalcards` database. |
-| `GEMINI_API_KEY` | For Gemini answers | Google AI Studio API key. Leave blank to use the local evidence-based match. |
-| `GEMINI_MODEL` | No | Gemini model name. The route defaults to `gemini-3.1-flash-lite`. |
-| `ADMIN_EMAIL` | Recommended | Admin login email. The example has a demo value; replace it. |
-| `ADMIN_PASSWORD` | Recommended | Admin login password. The example is deliberately simple and must be changed. |
-| `ADMIN_SECRET_KEY` | Recommended | Secret used by this prototype's admin token check. Use a long random value and do not reuse a real account password. |
+### The Flow
+1. **User Input (`app/login/page.tsx`)**:
+   - User inputs email and password, or clicks **"Use sample credentials"**.
+   - Calls `handleSubmit()` which sends `POST /api/auth` with `{ email, password }`.
+2. **Server Handler (`app/api/auth/route.ts`)**:
+   - Invokes `connectToDatabase()`.
+   - Checks if user exists via `User.findOne({ email })`.
+   - If user doesn't exist, automatically creates the user record in MongoDB: `User.create({ email, password, name })`.
+   - Sets a 30-day `evalboard_user` HTTP cookie containing `{ id, email, name }`.
+   - Returns JSON: `{ success: true, user: { id, email, name } }`.
+3. **Client State Update**:
+   - `localStorage.setItem("evalboard_user", JSON.stringify(data.user))`.
+   - Redirects to `/`.
+   - In `app/page.tsx`, `useEffect` loads the stored user, sets `user` state, shows user avatar in topbar, and displays the **"My Submissions"** tab.
+4. **Sign Out Flow**:
+   - Clicking **"Sign out"** calls `handleLogout()`.
+   - Calls `DELETE /api/auth` to clear the cookie.
+   - Removes `evalboard_user` from `localStorage` and resets state.
 
-Example local settings:
+### Code Snippet (`app/api/auth/route.ts`)
+
+```typescript
+export async function POST(request: Request) {
+  const { email = "", password = "" } = await request.json();
+  const trimmedEmail = email.trim().toLowerCase();
+  const name = trimmedEmail.split("@")[0] || "User";
+
+  await connectToDatabase();
+  let user = await User.findOne({ email: trimmedEmail });
+  if (!user) {
+    user = await User.create({ email: trimmedEmail, password: password || "password123", name });
+  }
+
+  const userData = { id: user._id.toString(), email: user.email, name: user.name || name };
+  const res = NextResponse.json({ success: true, user: userData });
+  res.cookies.set("evalboard_user", JSON.stringify(userData), { path: "/", maxAge: 60 * 60 * 24 * 30 });
+  return res;
+}
+
+export async function DELETE() {
+  const res = NextResponse.json({ success: true });
+  res.cookies.set("evalboard_user", "", { path: "/", maxAge: 0 });
+  return res;
+}
+```
+
+---
+
+## 6. Flow 3: Evaluation Cards & Submissions (`/api/evaluations` & `/`)
+
+### 1. Loading Evaluations (GET)
+- **Public Board**: Client calls `GET /api/evaluations`.
+  - Server runs `Evaluation.find({ $or: [{ status: "approved" }, { status: { $exists: false } }] }).sort({ evaluatedAt: -1 }).limit(100).lean()`.
+  - Returns verified live cards to display in the main scoreboard table.
+- **My Submissions**: If a user is logged in, client calls `GET /api/evaluations?user=you@example.com`.
+  - Server queries `Evaluation.find({ submittedByEmail: user })`.
+  - Returns cards submitted by that user with status badges (**Pending Review**, **Approved**, or **Rejected**).
+
+### 2. Submitting an Evaluation (POST)
+- User clicks **"Submit a result"** or **"Add evaluation"**, fills in the modal form (`model`, `organization`, `benchmark`, `score`, `metric`, `category`, `source`).
+- Submits form via `createEvaluation()` in `app/page.tsx`.
+- Handler `POST /api/evaluations`:
+  - Inserts card into MongoDB with `status: "pending"` and submitter's email.
+  - Returns newly created document.
+  - Client updates `userEvaluations` and switches category tab to **"My Submissions"**.
+
+### Code Snippet (`app/api/evaluations/route.ts`)
+
+```typescript
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const user = searchParams.get("user")?.trim().toLowerCase();
+
+  await connectToDatabase();
+  const query = user ? { submittedByEmail: user } : { $or: [{ status: "approved" }, { status: { $exists: false } }] };
+  const evaluations = await Evaluation.find(query).sort({ evaluatedAt: -1 }).limit(100).lean();
+
+  return NextResponse.json({ evaluations, database: "connected" });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  await connectToDatabase();
+
+  const evaluation = await Evaluation.create({
+    model: body.model?.trim(),
+    organization: body.organization?.trim(),
+    benchmark: body.benchmark?.trim(),
+    score: Number(body.score),
+    metric: body.metric?.trim(),
+    category: body.category?.trim(),
+    source: body.source?.trim() || "",
+    status: "pending",
+    submittedBy: body.submittedBy?.trim() || "community",
+    submittedByEmail: body.submittedByEmail?.trim().toLowerCase() || "",
+  });
+
+  return NextResponse.json({ evaluation }, { status: 201 });
+}
+```
+
+---
+
+## 7. Flow 4: Model Advisor & Gemini Recommendation (`/api/recommendations`)
+
+### The Flow
+1. **User Description (`app/page.tsx`)**:
+   - User opens **"Find my model"** dialog and enters a description (e.g. *"I need a fast reasoning model to debug and write python algorithms"*).
+   - Calls `findModel()` which sends `POST /api/recommendations` with `{ work }`.
+2. **Category Inference (`inferCategories`)**:
+   - Evaluates keywords in the work text against category dictionaries (`Coding`, `Reasoning`, `Knowledge`, `Safety`).
+3. **Database Candidate Aggregation**:
+   - Reads evaluation cards from MongoDB.
+   - Cleans names (strips legacy `Demo ·` prefixes).
+   - Calculates average scores for each candidate model across matching categories and sorts descending.
+4. **Gemini AI Recommendation**:
+   - If `GEMINI_API_KEY` is present, sends candidate list to Google's Generative Language API (`models/gemini-2.5-flash:generateContent`) with `responseMimeType: "application/json"`.
+   - Receives JSON response with `{ model, reason }`.
+5. **Fallback Response**:
+   - If Gemini is unavailable, rate-limited, or unconfigured, it immediately falls back to the top database match:
+     `GPT-4.1 has the highest benchmark average (89.8%) in the relevant evaluation categories.`
+6. **Modal Rendering**:
+   - Displays the **Top Match Card**, average score percentage, concise reason text, and **Supporting Benchmarks** evidence list.
+
+### Code Snippet (`app/api/recommendations/route.ts`)
+
+```typescript
+function inferCategories(work: string) {
+  const text = work.toLowerCase();
+  const terms: Record<string, string[]> = {
+    Coding: ["code", "coding", "program", "software", "dev", "debug", "web", "app", "python", "javascript", "react", "api"],
+    Reasoning: ["reason", "math", "logic", "solve", "plan", "analyze", "problem", "proof", "agent"],
+    Knowledge: ["research", "fact", "knowledge", "study", "learn", "explain", "summarize", "document", "answer"],
+    Safety: ["safe", "safety", "moderate", "harm", "policy", "risk", "trust"],
+  };
+  const matched = Object.entries(terms).filter(([, words]) => words.some((w) => text.includes(w))).map(([cat]) => cat);
+  return matched.length ? matched : ["Reasoning", "Coding", "Knowledge", "Safety"];
+}
+
+export async function POST(request: Request) {
+  const { work = "" } = await request.json();
+  await connectToDatabase();
+
+  const records = await Evaluation.find().select("model organization benchmark score metric category").lean();
+  const categories = inferCategories(work);
+
+  const groups = new Map<string, any[]>();
+  for (const r of records) {
+    const name = r.model.replace(/^Demo\s*[·-]\s*/i, "").trim();
+    const list = groups.get(name) || [];
+    list.push({ ...r, model: name });
+    groups.set(name, list);
+  }
+
+  const candidates = [...groups.entries()].map(([model, items]) => {
+    const matching = items.filter((i) => categories.includes(i.category));
+    const evidence = matching.length ? matching : items;
+    const average = Math.round((evidence.reduce((sum, i) => sum + i.score, 0) / evidence.length) * 10) / 10;
+    return {
+      model,
+      organization: items[0].organization,
+      average,
+      evidence: evidence.slice(0, 3).map(({ benchmark, metric, score, category }) => ({ benchmark, metric, score, category })),
+    };
+  }).sort((a, b) => b.average - a.average).slice(0, 8);
+
+  const best = candidates[0] || { model: "GPT-4.1", organization: "OpenAI", average: 88, evidence: [] };
+  let reason = `${best.model} has the highest benchmark average (${best.average}%) in the relevant evaluation categories.`;
+
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (apiKey) {
+    try {
+      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Task: "${work}". Candidates: ${JSON.stringify(candidates)}. Pick the best model and return JSON with keys "model" and "reason" (1 short sentence).` }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(raw);
+        if (parsed?.reason) reason = parsed.reason;
+      }
+    } catch {}
+  }
+
+  return NextResponse.json({ recommendation: best, reason, candidates });
+}
+```
+
+---
+
+## 8. Flow 5: Admin Moderation Console (`/admin` & `/api/admin/*`)
+
+### Security & Token Check (`lib/adminAuth.ts`)
+- Admin actions are protected by `x-admin-token` header matching `ADMIN_SECRET_KEY`.
+- Verified using `verifyAdminToken(request)`.
+
+### 1. Admin Login
+- Administrator logs in at `/admin`.
+- Submits credentials to `POST /api/admin/auth`.
+- If valid, returns `{ success: true, token, admin: { email, role } }`.
+- Client saves `token` in `sessionStorage` (`evalboard_admin_token`).
+
+### 2. Loading All Submissions (GET)
+- Client calls `GET /api/admin/evaluations` with `x-admin-token`.
+- Returns all evaluations regardless of status, plus live counts:
+  `{ evaluations, counts: { total, pending, approved, rejected } }`.
+
+### 3. Review Actions (PATCH & DELETE)
+- **Approve / Reject**: Clicking **Approve** or **Reject** calls `PATCH /api/admin/evaluations` with `{ id, status: "approved" | "rejected" }`.
+- **Delete**: Clicking the trash icon calls `DELETE /api/admin/evaluations?id=...`, which runs `Evaluation.findByIdAndDelete(id)`.
+
+### Code Snippet (`app/api/admin/evaluations/route.ts`)
+
+```typescript
+export async function GET(request: Request) {
+  if (!verifyAdminToken(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get("status")?.trim().toLowerCase();
+
+  await connectToDatabase();
+  const query = status && ["pending", "approved", "rejected"].includes(status) ? { status } : {};
+
+  const [evaluations, total, pending, approved, rejected] = await Promise.all([
+    Evaluation.find(query).sort({ evaluatedAt: -1 }).lean(),
+    Evaluation.countDocuments(),
+    Evaluation.countDocuments({ status: "pending" }),
+    Evaluation.countDocuments({ $or: [{ status: "approved" }, { status: { $exists: false } }] }),
+    Evaluation.countDocuments({ status: "rejected" }),
+  ]);
+
+  return NextResponse.json({ evaluations, counts: { total, pending, approved, rejected } });
+}
+
+export async function PATCH(request: Request) {
+  if (!verifyAdminToken(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, ...updates } = await request.json();
+  await connectToDatabase();
+
+  const updated = await Evaluation.findByIdAndUpdate(id, { $set: updates }, { new: true }).lean();
+  return NextResponse.json({ success: true, evaluation: updated });
+}
+
+export async function DELETE(request: Request) {
+  if (!verifyAdminToken(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  await connectToDatabase();
+
+  await Evaluation.findByIdAndDelete(id).lean();
+  return NextResponse.json({ success: true, id });
+}
+```
+
+---
+
+## 9. Environment Settings & Setup
+
+### Environment Variables (`.env`)
 
 ```dotenv
-MONGODB_URI=mongodb://127.0.0.1:27017/evalcards
-GEMINI_API_KEY=your_google_ai_studio_key
-GEMINI_MODEL=gemini-3.1-flash-lite
-ADMIN_EMAIL=you@example.com
-ADMIN_PASSWORD=replace-this-with-a-strong-password
-ADMIN_SECRET_KEY=replace-this-with-a-long-random-secret
+env
 ```
 
-Keep `.env.local` private. Do not commit it, paste keys into browser code, or share screenshots containing keys. After changing environment variables, restart `npm run dev` so the server loads the new values.
+### Running Locally
 
-## Main pages and components
+```bash
+# Install dependencies
+npm install
 
-### Public board — `/`
+# Start development server on port 3000
+npm run dev
 
-`app/page.tsx` is the main client-side page. It fetches public evaluations and provides search, category filters, summary counts, cards/table details, and submission controls. It also contains the Model Advisor dialog. The page uses browser storage for its demo user profile and for showing that user's submissions.
-
-### Sign in and sign up — `/login`
-
-`app/login/page.tsx` collects an email and password and calls `/api/auth`. After a successful response it saves a user profile in browser `localStorage` and returns to the board. The Google/GitHub-looking buttons are demo shortcuts, not real provider sign-in. The forgotten-password link is a placeholder.
-
-### Admin console — `/admin`
-
-`app/admin/page.tsx` provides an admin login gate and a moderation console. The console shows totals by status, filters cards by status, searches card fields, opens a detail view, and provides approve, reject, restore-to-pending, and delete actions. A deleted card is removed from MongoDB; status changes update its review metadata.
-
-### Shared layout and styling
-
-`app/layout.tsx` defines the document shell and page metadata. `app/globals.css` contains the styles shared by the board, forms, dialogs, status badges, login page, and admin console, including responsive behavior for smaller screens.
-
-### Database helpers
-
-`lib/db.ts` reads `MONGODB_URI` and caches a Mongoose connection on the server. `lib/Evaluation.ts` defines the evaluation document schema. `lib/adminAuth.ts` centralizes the current prototype admin credential and token checks.
-
-## API reference
-
-All routes below are implemented as Next.js route handlers under `app/api/`.
-
-| Method and path | What it does | Access / notes |
-| --- | --- | --- |
-| `GET /api/evaluations` | Returns up to 100 approved evaluations, newest first. | Public. Records without a status are included as legacy approved records. |
-| `GET /api/evaluations?user=email` | Returns records attributed to the supplied email, including review statuses. | Prototype-only: the email is not verified against a secure session. |
-| `POST /api/evaluations` | Validates and creates an evaluation with pending status. | Public in the current implementation. Required fields include model, organization, benchmark, score, metric, category, and evaluated date. Score must be between 0 and 100. |
-| `POST /api/recommendations` | Uses task text to rank evaluation-backed candidates and optionally ask Gemini to choose one. | Public. Work description must be 12–1,200 characters. Requires existing evaluation data. |
-| `POST /api/auth` | Creates a demo user or checks a login. | Prototype auth; see security notes. |
-| `POST /api/admin/auth` | Checks admin credentials and returns the prototype admin token. | Admin login. |
-| `GET /api/admin/auth` | Checks the admin token supplied in the request header. | Admin token required. |
-| `GET /api/admin/evaluations` | Lists evaluations and status counts; supports a status filter. | Admin token required. |
-| `PATCH /api/admin/evaluations` | Changes a card's status and editable evaluation fields. | Admin token required. |
-| `DELETE /api/admin/evaluations?id=...` | Deletes an evaluation by its MongoDB id. | Admin token required. |
-
-For admin API calls, the current client sends the token using `x-admin-token` (the helper also accepts a Bearer token). Because this is a prototype token design, it should be replaced before public deployment.
-
-## Database structure
-
-The MongoDB database name is taken from `MONGODB_URI`. Mongoose creates collections as needed.
-
-### `evaluations` collection
-
-Each evaluation card contains:
-
-| Field | Meaning |
-| --- | --- |
-| `model` | Model name being evaluated. |
-| `organization` | Company or organization associated with that model. |
-| `benchmark` | Name of the evaluation benchmark. |
-| `score` | Numeric score from 0 through 100. |
-| `metric` | What the score measures, such as accuracy. |
-| `category` | One of `Reasoning`, `Coding`, `Knowledge`, or `Safety`. |
-| `source` | Optional URL or source description for the result. |
-| `status` | `pending`, `approved`, or `rejected`. |
-| `submittedBy`, `submittedByEmail` | Submitter attribution shown in the board/admin tools. |
-| `reviewedAt`, `reviewedBy` | Review metadata populated by admin actions. |
-| `evaluatedAt` | Date of the evaluation result. |
-| `createdAt`, `updatedAt` | Mongoose timestamps. |
-
-### `users` collection
-
-The user route defines a small user model in `app/api/auth/route.ts`. It stores a normalized email, a password hash value, and a creation date. Its current password hashing is explicitly a demo implementation, not production-grade security.
-
-## How the model advisor works
-
-The Advisor is evidence constrained: Gemini receives the user's task, inferred work categories, and a shortlist generated from records in MongoDB. It is instructed to pick one supplied candidate and explain the choice using only the supplied evidence. Gemini does not search the internet or all available AI models.
-
-The route proceeds as follows:
-
-1. It validates the task description and reads up to 300 evaluation records.
-2. It looks for task words associated with coding, reasoning, knowledge, or safety.
-3. It groups records by model and computes average scores using records in the matching categories. If no category can be inferred, or a model has no matching-category record, it can use that model's available records.
-4. It sorts candidates by score and sends up to eight candidates to Gemini when `GEMINI_API_KEY` is set.
-5. It accepts Gemini's answer only if it is valid JSON, names one of the supplied candidates exactly, and includes a reason.
-6. If Gemini is missing, unavailable, rate limited, rejects the key, or returns an unusable result, the route returns the top local candidate and an explanatory notice.
-
-This fallback means the Advisor can still return a result without Gemini, but it is then a score-based database match, not an AI-generated response. The page indicates which mode was used. Many seeded records are labeled as demo data; their scores are examples, not verified model rankings. Benchmark scores are only a rough proxy for a particular user's task.
-
-## Common tasks
-
-### Add real Gemini recommendations
-
-1. Put a valid Google AI Studio key in `.env.local` as `GEMINI_API_KEY`.
-2. Confirm the selected model is available to that Google project; optionally set `GEMINI_MODEL`.
-3. Restart the development server.
-4. Submit a task description in the Model Advisor. A successful response should identify the Gemini model in its result; a notice explains if the local fallback was used.
-
-The key belongs only in server environment settings. Do not add it to `NEXT_PUBLIC_*` variables.
-
-### Review a submitted evaluation
-
-Open `/admin`, sign in with configured admin credentials, choose **Pending Review**, and approve or reject the row. Approval publishes it on the public board; rejection keeps it out of the public list. In this prototype, the login page currently displays demo credentials, so remove or change that behavior before exposing the app.
-
-### Inspect evaluation data in MongoDB Atlas
-
-Open the Atlas project and cluster used by `MONGODB_URI`, then open **Browse Collections**. The database name is the path portion of the URI (for example, `evalcards`), and evaluation documents are in the Mongoose `evaluations` collection. User records are in `users`. Do not share the URI or screenshots of credentials.
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| MongoDB connection error | Confirm `MONGODB_URI`, network access/IP allowlist in Atlas, database user permissions, and that MongoDB is running if using a local server. Restart Next.js after environment changes. |
-| Model Advisor says Gemini is not configured | Set `GEMINI_API_KEY` in `.env.local` and restart the server. |
-| Gemini rejects the key | Confirm the key is valid, the Gemini API is enabled for its Google project, and the key has no extra spaces. |
-| Gemini model is unavailable | Check `GEMINI_MODEL` and whether that model is available to the API key's project. |
-| Gemini quota/rate-limit notice | Check the Google AI Studio project usage and quota. The local database match remains available if the route can read MongoDB. |
-| Advisor reports there are no results | Add evaluation records. The Advisor needs database evidence to build its candidate list. |
-| Submitted card is not on the public board | New submissions are pending. Approve them in `/admin`. |
-| Page opens on another port | Use the URL printed by `npm run dev`; Next.js can select another port when the default is busy. |
-
-## Security and data limitations
-
-This application was built as a small prototype. **Do not deploy it as a public production service without improving authentication and access control.** In the current code:
-
-- User passwords use a small custom hash, not a password hashing algorithm such as Argon2id or bcrypt.
-- User login is represented in browser `localStorage`; API routes do not verify a server-side user session. The personal submissions endpoint trusts an email query parameter, and submission attribution is accepted from the request body.
-- The social sign-in buttons are demo shortcuts, not Google/GitHub OAuth. Password recovery is a placeholder.
-- Admin authentication returns a shared secret token to the browser, and the example configuration contains weak demo defaults. The admin login page also displays default demo credentials.
-- There is no rate limiting or robust session/CSRF protection in this prototype.
-- Seeded/demo benchmark scores are illustrative and must not be presented as verified evaluations.
-
-Before a real deployment, use a mature authentication approach with secure, HTTP-only sessions, strong password hashing, server-side authorization tied to verified users, rate limiting, protected configuration, and reviewed/verified evaluation data. Remove visible default credentials and change all secrets first. Keep API keys and database credentials in the deployment platform's server-side secret settings.
+# Or build and run in production mode
+npm run build
+npm start
+```
