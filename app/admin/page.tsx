@@ -1,7 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Clock, Database, Eye, EyeOff, KeyRound, Layers3, Lock, LogOut, Mail, RefreshCw, Search, Shield, ShieldAlert, ShieldCheck, Sparkles, Trash2, X, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Clock,
+  Database,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Layers3,
+  Lock,
+  LogOut,
+  Mail,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  X,
+  XCircle,
+} from "lucide-react";
+import ThemeToggle from "@/lib/ThemeToggle";
 
 type AdminEvaluation = {
   _id: string;
@@ -78,15 +100,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     try {
-      const storedToken = sessionStorage.getItem("evalboard_admin_token") || localStorage.getItem("evalboard_admin_token");
-      const storedEmail = sessionStorage.getItem("evalboard_admin_email") || localStorage.getItem("evalboard_admin_email");
+      const storedToken =
+        sessionStorage.getItem("evalboard_admin_token") || localStorage.getItem("evalboard_admin_token");
+      const storedEmail =
+        sessionStorage.getItem("evalboard_admin_email") || localStorage.getItem("evalboard_admin_email");
       if (storedToken) {
         setAdminToken(storedToken);
         setAdminEmail(storedEmail || "admin@evalboard.com");
         void loadData(storedToken);
       }
-    } catch { /* Ignore */ }
-    finally {
+    } catch {
+      /* Ignore */
+    } finally {
       setAuthChecking(false);
     }
   }, []);
@@ -122,7 +147,9 @@ export default function AdminPage() {
       sessionStorage.removeItem("evalboard_admin_email");
       localStorage.removeItem("evalboard_admin_token");
       localStorage.removeItem("evalboard_admin_email");
-    } catch { /* Ignore */ }
+    } catch {
+      /* Ignore */
+    }
     setAdminToken(null);
     setEvaluations([]);
     setLoginPassword("");
@@ -152,7 +179,7 @@ export default function AdminPage() {
       setNotice(`Evaluation marked as ${status}.`);
       setTimeout(() => setNotice(null), 3500);
       if (selected && selected._id === id) {
-        setSelected((prev) => prev ? { ...prev, status } : null);
+        setSelected((prev) => (prev ? { ...prev, status } : null));
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to update status.");
@@ -196,36 +223,47 @@ export default function AdminPage() {
       const needle = query.toLowerCase().trim();
       const matchesQuery =
         !needle ||
-        [item.model, item.organization, item.benchmark, item.category, item.submittedBy || "", item.submittedByEmail || ""]
-          .some((v) => v.toLowerCase().includes(needle));
+        [
+          item.model,
+          item.organization,
+          item.benchmark,
+          item.category,
+          item.submittedBy || "",
+          item.submittedByEmail || "",
+        ].some((v) => v.toLowerCase().includes(needle));
       return matchesTab && matchesQuery;
     });
   }, [evaluations, activeTab, query]);
 
-  // Loading state while checking session
   if (authChecking) {
     return (
       <main className="shell admin-shell" style={{ display: "grid", placeItems: "center", minHeight: "80vh" }}>
-        <div style={{ textAlign: "center", color: "#6e776f" }}>
+        <div style={{ textAlign: "center", color: "var(--text-secondary)" }}>
           <span className="spinner" /> Verifying administrator credentials…
         </div>
       </main>
     );
   }
 
-  // ─── Admin Login Gate ───
   if (!adminToken) {
     return (
       <main className="shell admin-shell">
         <header className="topbar">
           <div className="admin-brand-wrap">
             <a className="brand" href="/" aria-label="Evalboard home">
-              <span className="brand-mark"><Layers3 size={19} strokeWidth={2.3} /></span>
-              <span>evalboard<span className="brand-dot">.</span></span>
+              <span className="brand-mark">
+                <Layers3 size={19} strokeWidth={2.3} />
+              </span>
+              <span>
+                evalboard<span className="brand-dot">.</span>
+              </span>
             </a>
-            <span className="admin-pill"><Shield size={12} /> Restricted Area</span>
+            <span className="admin-pill">
+              <Shield size={12} /> Restricted Area
+            </span>
           </div>
           <div className="top-actions">
+            <ThemeToggle />
             <a className="button button-outline button-small" href="/">
               <ArrowLeft size={14} /> Back to Live Board
             </a>
@@ -286,9 +324,13 @@ export default function AdminPage() {
 
               <button className="button button-dark login-submit" type="submit" disabled={loginLoading}>
                 {loginLoading ? (
-                  <><span className="spinner light-spinner" /> Verifying credentials…</>
+                  <>
+                    <span className="spinner light-spinner" /> Verifying credentials…
+                  </>
                 ) : (
-                  <><Shield size={15} /> Unlock Admin Console</>
+                  <>
+                    <Shield size={15} /> Unlock Admin Console
+                  </>
                 )}
               </button>
             </form>
@@ -297,7 +339,9 @@ export default function AdminPage() {
               <Shield size={13} />
               <div>
                 <strong>Default Administrator Access:</strong>
-                <span>Email: <code>admin@evalboard.com</code> &bull; Password: <code>admin123</code></span>
+                <span>
+                  Email: <code>admin@evalboard.com</code> &bull; Password: <code>admin123</code>
+                </span>
               </div>
             </div>
           </div>
@@ -306,22 +350,30 @@ export default function AdminPage() {
     );
   }
 
-  // ─── Authenticated Admin Console ───
   return (
     <main className="shell admin-shell">
       <header className="topbar">
         <div className="admin-brand-wrap">
           <a className="brand" href="/" aria-label="Evalboard home">
-            <span className="brand-mark"><Layers3 size={19} strokeWidth={2.3} /></span>
-            <span>evalboard<span className="brand-dot">.</span></span>
+            <span className="brand-mark">
+              <Layers3 size={19} strokeWidth={2.3} />
+            </span>
+            <span>
+              evalboard<span className="brand-dot">.</span>
+            </span>
           </a>
-          <span className="admin-pill"><Shield size={12} /> Admin Console</span>
+          <span className="admin-pill">
+            <Shield size={12} /> Admin Console
+          </span>
         </div>
         <nav className="topnav">
-          <a className="active" href="/admin">Evaluation Cards ({counts.total})</a>
+          <a className="active" href="/admin">
+            Evaluation Cards ({counts.total})
+          </a>
           <a href="/">Live Scoreboard</a>
         </nav>
         <div className="top-actions">
+          <ThemeToggle />
           <div className="admin-user-tag">
             <ShieldCheck size={13} />
             <span>{adminEmail}</span>
@@ -329,7 +381,11 @@ export default function AdminPage() {
           <button className="button button-outline button-small" onClick={() => void loadData()} disabled={loading}>
             <RefreshCw size={13} className={loading ? "spin-icon" : ""} /> Refresh
           </button>
-          <button className="button button-outline button-small" onClick={handleAdminLogout} title="Log out administrator">
+          <button
+            className="button button-outline button-small"
+            onClick={handleAdminLogout}
+            title="Log out administrator"
+          >
             <LogOut size={13} /> Log out
           </button>
           <a className="button button-dark button-small" href="/">
@@ -345,22 +401,38 @@ export default function AdminPage() {
       )}
 
       {error && (
-        <div className="admin-banner-notice" style={{ background: "#fdf2f2", borderColor: "#fad7d7", color: "#a84646" }}>
+        <div
+          className="admin-banner-notice"
+          style={{
+            background: "rgba(217, 83, 79, 0.15)",
+            borderColor: "rgba(217, 83, 79, 0.3)",
+            color: "#d9534f",
+          }}
+        >
           <XCircle size={14} /> {error}
         </div>
       )}
 
       <section className="admin-hero">
         <div>
-          <div className="eyebrow muted"><ShieldCheck size={12} /> CONTENT MODERATION &amp; GOVERNANCE</div>
-          <h1>Evaluation Cards <span>Management</span></h1>
-          <p>Review user-submitted evaluations before they go live on the public scoreboard. Approve valid benchmarks or manage existing ones.</p>
+          <div className="eyebrow muted">
+            <ShieldCheck size={12} /> CONTENT MODERATION &amp; GOVERNANCE
+          </div>
+          <h1>
+            Evaluation Cards <span>Management</span>
+          </h1>
+          <p>
+            Review user-submitted evaluations before they go live on the public scoreboard. Approve valid benchmarks
+            or manage existing ones.
+          </p>
         </div>
       </section>
 
       <section className="stats admin-stats" aria-label="Admin overview">
         <div className="stat-item cursor-pointer" onClick={() => setActiveTab("all")}>
-          <div className="stat-icon blue"><Database size={17} /></div>
+          <div className="stat-icon blue">
+            <Database size={17} />
+          </div>
           <div>
             <div className="stat-value">{loading ? "…" : counts.total}</div>
             <div className="stat-label">Total cards in system</div>
@@ -368,7 +440,9 @@ export default function AdminPage() {
           <span className="stat-note">all states</span>
         </div>
         <div className="stat-item cursor-pointer" onClick={() => setActiveTab("pending")}>
-          <div className="stat-icon amber"><Clock size={17} /></div>
+          <div className="stat-icon amber">
+            <Clock size={17} />
+          </div>
           <div>
             <div className="stat-value">{loading ? "…" : counts.pending}</div>
             <div className="stat-label">Pending approval</div>
@@ -376,7 +450,9 @@ export default function AdminPage() {
           <span className="stat-note">{counts.pending > 0 ? "needs review" : "up to date"}</span>
         </div>
         <div className="stat-item cursor-pointer" onClick={() => setActiveTab("approved")}>
-          <div className="stat-icon green"><ShieldCheck size={17} /></div>
+          <div className="stat-icon green">
+            <ShieldCheck size={17} />
+          </div>
           <div>
             <div className="stat-value">{loading ? "…" : counts.approved}</div>
             <div className="stat-label">Approved &amp; live</div>
@@ -384,7 +460,9 @@ export default function AdminPage() {
           <span className="stat-note">shown on public board</span>
         </div>
         <div className="stat-item cursor-pointer" onClick={() => setActiveTab("rejected")}>
-          <div className="stat-icon violet"><ShieldAlert size={17} /></div>
+          <div className="stat-icon violet">
+            <ShieldAlert size={17} />
+          </div>
           <div>
             <div className="stat-value">{loading ? "…" : counts.rejected}</div>
             <div className="stat-label">Rejected</div>
@@ -399,13 +477,23 @@ export default function AdminPage() {
             <button className={`tab ${activeTab === "all" ? "selected" : ""}`} onClick={() => setActiveTab("all")}>
               All cards <span className="tab-pill">{counts.total}</span>
             </button>
-            <button className={`tab ${activeTab === "pending" ? "selected" : ""}`} onClick={() => setActiveTab("pending")}>
-              Pending Review <span className={`tab-pill ${counts.pending > 0 ? "pill-alert" : ""}`}>{counts.pending}</span>
+            <button
+              className={`tab ${activeTab === "pending" ? "selected" : ""}`}
+              onClick={() => setActiveTab("pending")}
+            >
+              Pending Review{" "}
+              <span className={`tab-pill ${counts.pending > 0 ? "pill-alert" : ""}`}>{counts.pending}</span>
             </button>
-            <button className={`tab ${activeTab === "approved" ? "selected" : ""}`} onClick={() => setActiveTab("approved")}>
+            <button
+              className={`tab ${activeTab === "approved" ? "selected" : ""}`}
+              onClick={() => setActiveTab("approved")}
+            >
               Approved <span className="tab-pill">{counts.approved}</span>
             </button>
-            <button className={`tab ${activeTab === "rejected" ? "selected" : ""}`} onClick={() => setActiveTab("rejected")}>
+            <button
+              className={`tab ${activeTab === "rejected" ? "selected" : ""}`}
+              onClick={() => setActiveTab("rejected")}
+            >
               Rejected <span className="tab-pill">{counts.rejected}</span>
             </button>
           </div>
@@ -464,7 +552,10 @@ export default function AdminPage() {
                         <span className={`category-pill category-${item.category.toLowerCase()}`}>{item.category}</span>
                       </td>
                       <td onClick={() => setSelected(item)}>
-                        <span className="score-number">{item.score.toFixed(1)}<small>%</small></span>
+                        <span className="score-number">
+                          {item.score.toFixed(1)}
+                          <small>%</small>
+                        </span>
                       </td>
                       <td onClick={() => setSelected(item)}>
                         <div className="admin-submitter-cell">
@@ -474,13 +565,19 @@ export default function AdminPage() {
                       </td>
                       <td>
                         {status === "pending" && (
-                          <span className="status-badge status-pending"><Clock size={11} /> Pending</span>
+                          <span className="status-badge status-pending">
+                            <Clock size={11} /> Pending
+                          </span>
                         )}
                         {status === "approved" && (
-                          <span className="status-badge status-approved"><Check size={11} /> Approved</span>
+                          <span className="status-badge status-approved">
+                            <Check size={11} /> Approved
+                          </span>
                         )}
                         {status === "rejected" && (
-                          <span className="status-badge status-rejected"><XCircle size={11} /> Rejected</span>
+                          <span className="status-badge status-rejected">
+                            <XCircle size={11} /> Rejected
+                          </span>
                         )}
                       </td>
                       <td style={{ textAlign: "right" }}>
@@ -531,7 +628,9 @@ export default function AdminPage() {
               ) : (
                 <tr>
                   <td colSpan={7} className="empty-row">
-                    <div className="empty-icon"><Database size={20} /></div>
+                    <div className="empty-icon">
+                      <Database size={20} />
+                    </div>
                     <strong>No evaluations found</strong>
                     <p>{query ? "Try clearing your search query." : "No cards in this category."}</p>
                   </td>
@@ -542,44 +641,102 @@ export default function AdminPage() {
         </div>
 
         <div className="table-footer">
-          <span>Showing <b>{visibleEvaluations.length}</b> of <b>{evaluations.length}</b> cards</span>
-          <span className="updated-label"><span className="live-dot" /> Connected to MongoDB ({counts.total} total)</span>
+          <span>
+            Showing <b>{visibleEvaluations.length}</b> of <b>{evaluations.length}</b> cards
+          </span>
+          <span className="updated-label">
+            <span className="live-dot" /> Connected to MongoDB ({counts.total} total)
+          </span>
         </div>
       </section>
 
       {/* Detail Modal */}
       {selected && (
-        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSelected(null);
+          }}
+        >
           <section className="modal detail-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
               <div>
                 <div className="eyebrow muted">CARD AUDIT &amp; MODERATION</div>
                 <h2>{selected.model}</h2>
-                <p>{selected.organization} · {selected.category}</p>
+                <p>
+                  {selected.organization} · {selected.category}
+                </p>
               </div>
-              <button className="icon-button" onClick={() => setSelected(null)}><X size={19} /></button>
+              <button className="icon-button" onClick={() => setSelected(null)}>
+                <X size={19} />
+              </button>
             </div>
 
             <div className="detail-score">
               <div>
                 <span className="eyebrow muted">BENCHMARK SCORE</span>
-                <div className="detail-number">{selected.score.toFixed(1)}<small>%</small></div>
+                <div className="detail-number">
+                  {selected.score.toFixed(1)}
+                  <small>%</small>
+                </div>
               </div>
               <span className={`status-badge status-${selected.status || "approved"}`}>
-                {selected.status === "pending" && <><Clock size={12} /> Pending</>}
-                {(!selected.status || selected.status === "approved") && <><Check size={12} /> Approved &amp; Live</>}
-                {selected.status === "rejected" && <><XCircle size={12} /> Rejected</>}
+                {selected.status === "pending" && (
+                  <>
+                    <Clock size={12} /> Pending
+                  </>
+                )}
+                {(!selected.status || selected.status === "approved") && (
+                  <>
+                    <Check size={12} /> Approved &amp; Live
+                  </>
+                )}
+                {selected.status === "rejected" && (
+                  <>
+                    <XCircle size={12} /> Rejected
+                  </>
+                )}
               </span>
             </div>
 
             <div className="detail-list">
-              <div><span>Benchmark</span><b>{selected.benchmark}</b></div>
-              <div><span>Metric</span><b>{selected.metric}</b></div>
-              <div><span>Submitted By</span><b>{selected.submittedBy || "Admin"} ({selected.submittedByEmail || "Internal"})</b></div>
-              <div><span>Submitted Date</span><b>{new Date(selected.evaluatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</b></div>
-              {selected.reviewedAt && <div><span>Reviewed Date</span><b>{new Date(selected.reviewedAt).toLocaleDateString()}</b></div>}
+              <div>
+                <span>Benchmark</span>
+                <b>{selected.benchmark}</b>
+              </div>
+              <div>
+                <span>Metric</span>
+                <b>{selected.metric}</b>
+              </div>
+              <div>
+                <span>Submitted By</span>
+                <b>
+                  {selected.submittedBy || "Admin"} ({selected.submittedByEmail || "Internal"})
+                </b>
+              </div>
+              <div>
+                <span>Submitted Date</span>
+                <b>
+                  {new Date(selected.evaluatedAt).toLocaleDateString(undefined, {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </b>
+              </div>
+              {selected.reviewedAt && (
+                <div>
+                  <span>Reviewed Date</span>
+                  <b>{new Date(selected.reviewedAt).toLocaleDateString()}</b>
+                </div>
+              )}
               {selected.source && (
-                <div><span>Source URL</span><a href={selected.source} target="_blank" rel="noreferrer">Open link <ArrowUpRight size={13} /></a></div>
+                <div>
+                  <span>Source URL</span>
+                  <a href={selected.source} target="_blank" rel="noreferrer">
+                    Open link <ArrowUpRight size={13} />
+                  </a>
+                </div>
               )}
             </div>
 
@@ -590,11 +747,18 @@ export default function AdminPage() {
                 </button>
               )}
               {selected.status !== "rejected" && (
-                <button className="button button-outline" style={{ color: "#ad5555" }} onClick={() => void updateStatus(selected._id, "rejected")}>
+                <button
+                  className="button button-outline"
+                  style={{ color: "#d9534f" }}
+                  onClick={() => void updateStatus(selected._id, "rejected")}
+                >
                   <X size={15} /> Reject
                 </button>
               )}
-              <button className="button button-outline" onClick={() => void deleteEvaluation(selected._id, selected.model)}>
+              <button
+                className="button button-outline"
+                onClick={() => void deleteEvaluation(selected._id, selected.model)}
+              >
                 <Trash2 size={15} /> Delete Card
               </button>
             </div>
